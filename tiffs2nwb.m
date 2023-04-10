@@ -1,4 +1,4 @@
-function [nwb] = tiffs2nwb(tiffDir, xmlFile, nwbFilePath, yamlFile)
+function [nwb] = tiffs2nwb(tiffDir, xmlFile, metadataFile, nwbFilePath)
 
 filename = strcat(mfilename('fullpath'), '.m');
 [dirPath,~,~] = fileparts(filename);
@@ -7,6 +7,13 @@ addpath(fullfile(dirPath, 'matnwb'))
 if ~exist('xmlFile','var') || isempty(xmlFile)
     xmlFile = fullfile(tiffDir, 'Experiment.xml');
 end
+
+if ~exist('metadataFile','var') || isempty(metadataFile)
+    metadataFile = fullfile(tiffDir, 'metadata.json');
+end
+disp(metadataFile);
+assert(isfile(metadataFile), 'metadata.json not found. please use the metadata wizard to create one.')
+metadata = jsondecode(fileread(metadataFile));
 
 info = read_Thor_xml(xmlFile);
 experiment = readExperiment(xmlFile);
@@ -36,24 +43,22 @@ for i = 1:depth
 end
 
 nwb = NwbFile( ...
-    'session_description', 'described the session', ... % optional, but required by inspector
-    'general_experiment_description', 'Zstack in the upstream segment of a pial artery from a BPN mouse 24 min after cisterna magna injection', ...
-    'general_session_id', '20210513-m1', ...
-    'identifier', name, ...
-    'session_start_time', time, ...
-    'general_experimenter', 'Ladron de Guevara, Antonio', ... % optional
-    'general_institution', 'University of Rochester', ... % optional, but preferred by inspector
-    ...'general_related_publications', 'DOI', ... % optional
-    'general_keywords', '20210524-m1' ...
+    'session_description', metadata.description, ... % optional, but required by inspector
+    'general_session_id', metadata.sessionID, ...
+    'identifier', metadata.identifier, ...
+    'session_start_time', datetime(metadata.startTime), ...
+    'general_experimenter', [metadata.lastName ', ' metadata.firstName], ... % optional
+    'general_institution', metadata.institution, ... % optional, but preferred by inspector
+    'general_keywords', metadata.keywords ...
 );
 
 % subject info
 subject = types.core.Subject( ...
-    'subject_id', 'BPN-OLD-M3', ...
+    'subject_id', metadata.subjectID, ...
     'age', 'P90D', ...
     'description', 'mouse 5', ... % optional, but preferred by inspector
-    'species', 'Mus musculus', ... % Subject species 'Mouse' should be in latin binomial form, e.g. 'Mus musculus' and 'Homo sapiens'
-    'sex', 'M' ...
+    'species', metadata.subjectSpecies, ... % Subject species 'Mouse' should be in latin binomial form, e.g. 'Mus musculus' and 'Homo sapiens'
+    'sex', metadata.subjectSex ...
 );
 
 % tiff data
