@@ -1,45 +1,27 @@
-function [nwb] = tiffs2nwb(tiffDir, xmlFile, metadataFile, nwbFilePath)
+rawFile = 'C:\Users\Yue\matlab_projects\brainwaveZZZ\ati-pen1-33min\Image_0001_0001.raw';
+rawDir = 'C:\Users\Yue\matlab_projects\brainwaveZZZ\ati-pen1-33min\';
+nwbFilePath = '.\brainwavezzz\Image_0001_0001.nwb';
+[img,coords,info]=read_raw(rawFile);
+[nr, nc, depth] = size(img{1});
+rawData = NaN(3, nr, nc, depth);
 
-filename = strcat(mfilename('fullpath'), '.m');
-[dirPath,~,~] = fileparts(filename);
-addpath(fullfile(dirPath, 'matnwb'))
+for i = 1:length(img)
+    rawData(i, :, :, :) = img{i};
+end
 
 if ~exist('xmlFile','var') || isempty(xmlFile)
-    xmlFile = fullfile(tiffDir, 'Experiment.xml');
+    xmlFile = fullfile(rawDir, 'Experiment.xml');
 end
 
 if ~exist('metadataFile','var') || isempty(metadataFile)
-    metadataFile = fullfile(tiffDir, 'metadata.json');
+    metadataFile = fullfile(rawDir, 'metadata.json');
 end
 
 assert(isfile(metadataFile), 'metadata.json not found. please use the metadata wizard to create one.')
 metadata = jsondecode(fileread(metadataFile));
 
-info = read_Thor_xml(xmlFile);
 experiment = readExperiment(xmlFile);
-
 name = info.Name;
-
-nChannels = info.NumCh;
-channelArrays = {'ChanA', 'ChanB', 'ChanC'};
-channelNames = channelArrays{1:nChannels};
-channelFiles = strings(1, nChannels);
-for i = 1:nChannels
-    channelFiles(i) = fullfile(tiffDir, [channelNames,'_0001_0001_',num2str(i,'%04d') '_0001.tif']);
-end
-
-depth = experiment.NumIm; 
-tiffData = NaN(3, 512, 512, depth);
-for i = 1:depth
-    if mod(i,100) == 0
-        disp(['Importing image ' num2str(i) ' of ' num2str(depth)])
-    end
-
-    for j = 1:nChannels
-        tiffData(j, :, :, i) = uint16(imread(channelFiles(j)));
-    end
-
-end
 
 nwb = NwbFile( ...
     'session_description', metadata.description, ... % optional, but required by inspector
@@ -51,14 +33,11 @@ nwb = NwbFile( ...
     'general_keywords', metadata.keywords ...
 );
 
-ageDays = ceil(days(datetime(metadata.startTime) - datetime(metadata.subjectDOB)));
-ageDays = 'P' + string(ageDays) + 'D';
-
 % subject info
 subject = types.core.Subject( ...
     'subject_id', metadata.subjectID, ...
-    'age', char(ageDays), ...
-    ...'description', 'mouse 5', ... % optional, but preferred by inspector
+    'date_of_birth', metadata.subjectDOB, ...
+    ... 'description', 'mouse 5', ... % optional, but preferred by inspector
     'species', metadata.subjectSpecies, ... % Subject species 'Mouse' should be in latin binomial form, e.g. 'Mus musculus' and 'Homo sapiens'
     'sex', metadata.subjectSex, ...
     'strain', metadata.subjectStrain ...
@@ -67,8 +46,7 @@ subject = types.core.Subject( ...
 % tiff data
 for i = 1:depth
 rgbImage = types.core.RGBImage( ...
-    'data', tiffData(:, :, :, i), ...  % required
-    ...'resolution', 70.0, ...
+    'data', rawData(:, :, :, i), ...  % required
     'description', ['depth_', num2str(i)] ...
 );
 imageCollection = types.core.Images( ...
@@ -82,11 +60,11 @@ nwb.acquisition.set('image collection', imageCollection);
 nwb.general_subject = subject;
 
 if ~exist('nwbFilePath','var') || isempty(nwbFilePath)
-    nwbFilePath = fullfile(tiffDir, name);
+    nwbFilePath = fullfile(rawDir, name);
+
 if ~endsWith(nwbFilePath,'.nwb')
     nwbFilePath = strcat(nwbFilePath, '.nwb');
 end
 end
 
 nwbExport(nwb, nwbFilePath);
-end

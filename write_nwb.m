@@ -1,3 +1,3 @@
-tiffDir = '.\brainwavezzz\z-stack-down\';
-nwbFilePath = '.\brainwavezzz\z-stack-down.nwb';
+tiffDir = '.\brainwavezzz\z-stack-up\';
+nwbFilePath = '.\brainwavezzz\z-stack-up.nwb';
 nwb = tiffs2nwb(tiffDir, [], [], nwbFilePath);
