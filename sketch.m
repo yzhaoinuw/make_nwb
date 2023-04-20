@@ -4,46 +4,106 @@ filename = strcat(mfilename('fullpath'), '.m');
 [dirPath,~,~] = fileparts(filename);
 addpath(fullfile(dirPath, 'matnwb'))
 
+maskFile = fullfile(tiffDir, 'Results.mat');
 xmlFile = fullfile(tiffDir, 'Experiment.xml');
 
+masks = load(maskFile);
 info = read_Thor_xml(xmlFile);
+experiment = readExperiment(xmlFile);
+
+if ~exist('metadataFile','var') || isempty(metadataFile)
+    metadataFile = fullfile(tiffDir, 'metadata.json');
+end
+
+assert(isfile(metadataFile), 'metadata.json not found. please use the metadata wizard to create one.')
+metadata = jsondecode(fileread(metadataFile));
 
 time = datetime(info.Date.date);
 name = info.Name;
-%nChannels = info.NumCh;
-nChannels = 2;
+nChannels = info.NumCh;
 channelArrays = {'ChanA', 'ChanB', 'ChanC'};
-channelNames = channelArrays{1:nChannels};
-channelFiles = strings(1, nChannels);
+depth = experiment.NumIm; 
+
+tiffData = zeros(nChannels, 512, 512, depth);
+for i = 1:nChannels
+    for j = 1:depth
+        if mod(j, 100) == 0
+            disp(['Importing image ' num2str(j) ' of ' num2str(depth)])
+        end
+        tiffFile = fullfile(tiffDir, [channelArrays{i}, '_0001_0001_', num2str(j,'%04d'), '_0001.tif']);
+        tiffData(i, :, :, j) = uint16(imread(tiffFile));
+    end
+
+end
+
+nwb = NwbFile( ...
+    'session_description', metadata.description, ... % optional, but required by inspector
+    'general_session_id', metadata.sessionID, ...
+    'identifier', metadata.identifier, ...
+    'session_start_time', datetime(metadata.startTime), ...
+    'general_experimenter', [metadata.lastName ', ' metadata.firstName], ... % optional
+    'general_institution', metadata.institution, ... % optional, but preferred by inspector
+    'general_keywords', metadata.keywords ...
+);
+
+optical_channel = types.core.OpticalChannel( ...
+    'description', 'description', ...
+    'emission_lambda', 500. ...
+);
+device = types.core.Device( ...
+    'description', 'microscope', ...
+    'manufacturer', 'someBrand' ...
+);
+nwb.general_devices.set('Device', device);
 
 for i = 1:nChannels
-    channelFiles(i) = fullfile(tiffDir, [channelNames,'_0001_0001_',num2str(i,'%04d') '_0001.tif']);
+    imaging_plane_name = ['imaging_plane', num2str(i)];
+    imaging_plane = types.core.ImagingPlane( ...
+        'optical_channel', optical_channel, ...
+        'description', 'a very interesting part of the brain', ...
+        'device', types.untyped.SoftLink(device), ...
+        'excitation_lambda', 600., ...
+        'imaging_rate', 5., ...
+        'indicator', 'GFP', ...
+        'location', 'my favorite brain location' ...
+    );
+    nwb.general_optophysiology.set(imaging_plane_name, imaging_plane);
+
+    channelData = types.untyped.DataPipe( ...
+        'data', tiffData(i, :, :, :) ...
+    );
+    image_series = types.core.TwoPhotonSeries( ...
+        'imaging_plane', types.untyped.SoftLink(imaging_plane), ...
+        'starting_time', 0.0, ...
+        'starting_time_rate', 3.0, ...
+        'data', channelData, ...
+        'data_unit', 'lumens' ...
+    );
+    nwb.acquisition.set(['TwoPhotonSeries', channelArrays{i}], image_series);
+
+    plane_segmentation = types.core.PlaneSegmentation( ...
+    'colnames', {'image_mask'}, ...
+    'description', 'output from segmenting my favorite imaging plane', ...
+    'id', types.hdmf_common.ElementIdentifiers('data', int64(1:depth)), ...
+    'imaging_plane', types.untyped.SoftLink(imaging_plane), ...
+    'image_mask', types.hdmf_common.VectorData('data', masks.img{i}, 'description', 'image masks') ...
+    );
+    img_seg = types.core.ImageSegmentation();
+    img_seg.planesegmentation.set(['PlaneSegmentation', channelArrays{i}], plane_segmentation);
+    
 end
 
-%depth = experiment.NumIm; 
-depth = 10;
-%tiffData = zeros(nChannels, 512, 512, depth);
-tiffData = NaN(3, 512, 512, depth);
-for i = 1:depth
-    if mod(i,100) == 0
-        disp(['Importing image ' num2str(i) ' of ' num2str(depth)])
-    end
-
-    for j = 1:nChannels
-        tiffData(j, :, :, i) = uint16(imread(channelFiles(j)));
-    end
-
-end
-
-for i = 1:depth
-rgbImage = types.core.RGBImage( ...
-    'data', tiffData(:, :, :, i), ...  % required
-    ...'resolution', 70.0, ...
-    'description', ['depth_', num2str(i)] ...
+ophys_module = types.core.ProcessingModule( ...
+    'description',  'contains optical physiology data' ...
 );
-imageCollection = types.core.Images( ...
-    'description', 'Images at various depths.'...
-);
-imageCollection.image.set('Image', rgbImage);
+ophys_module.nwbdatainterface.set('ImageSegmentation', img_seg);
+nwb.processing.set('ophys', ophys_module);
+
+if ~exist('nwbFilePath','var') || isempty(nwbFilePath)
+    nwbFilePath = fullfile(tiffDir, name);
+if ~endsWith(nwbFilePath,'.nwb')
+    nwbFilePath = strcat(nwbFilePath, '.nwb');
 end
+end
+nwbExport(nwb, nwbFilePath);
 
