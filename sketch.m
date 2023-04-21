@@ -1,4 +1,4 @@
-tiffDir = '.\brainwaveZZZ\z-stack-up\';
+tiffDir = '.\brainwaveZZZ\zstack-up-94min\';
 
 filename = strcat(mfilename('fullpath'), '.m');
 [dirPath,~,~] = fileparts(filename);
@@ -21,10 +21,12 @@ metadata = jsondecode(fileread(metadataFile));
 time = datetime(info.Date.date);
 name = info.Name;
 nChannels = info.NumCh;
+width = info.ImageWidth
+height = info.ImageHeight
 channelArrays = {'ChanA', 'ChanB', 'ChanC'};
 depth = experiment.NumIm; 
 
-tiffData = zeros(nChannels, 512, 512, depth);
+tiffData = zeros(nChannels, width, height, depth);
 for i = 1:nChannels
     for j = 1:depth
         if mod(j, 100) == 0
@@ -55,6 +57,19 @@ device = types.core.Device( ...
     'manufacturer', 'someBrand' ...
 );
 nwb.general_devices.set('Device', device);
+img_seg = types.core.ImageSegmentation();
+
+% subject info
+ageDays = ceil(days(datetime(metadata.startTime) - datetime(metadata.subjectDOB)));
+ageDays = 'P' + string(ageDays) + 'D';
+subject = types.core.Subject( ...
+    'subject_id', metadata.subjectID, ...
+    'age', char(ageDays), ...
+    ...'description', 'mouse 5', ... % optional, but preferred by inspector
+    'species', metadata.subjectSpecies, ... % Subject species 'Mouse' should be in latin binomial form, e.g. 'Mus musculus' and 'Homo sapiens'
+    'sex', metadata.subjectSex, ...
+    'strain', metadata.subjectStrain ...
+);
 
 for i = 1:nChannels
     imaging_plane_name = ['imaging_plane', num2str(i)];
@@ -70,7 +85,8 @@ for i = 1:nChannels
     nwb.general_optophysiology.set(imaging_plane_name, imaging_plane);
 
     channelData = types.untyped.DataPipe( ...
-        'data', tiffData(i, :, :, :) ...
+        'data', tiffData(i, :, :, :), ...
+        'chunkSize', [1, width, height, 1] ...
     );
     image_series = types.core.TwoPhotonSeries( ...
         'imaging_plane', types.untyped.SoftLink(imaging_plane), ...
@@ -88,7 +104,7 @@ for i = 1:nChannels
     'imaging_plane', types.untyped.SoftLink(imaging_plane), ...
     'image_mask', types.hdmf_common.VectorData('data', masks.img{i}, 'description', 'image masks') ...
     );
-    img_seg = types.core.ImageSegmentation();
+    % img_seg = types.core.ImageSegmentation();
     img_seg.planesegmentation.set(['PlaneSegmentation', channelArrays{i}], plane_segmentation);
     
 end
@@ -98,6 +114,7 @@ ophys_module = types.core.ProcessingModule( ...
 );
 ophys_module.nwbdatainterface.set('ImageSegmentation', img_seg);
 nwb.processing.set('ophys', ophys_module);
+nwb.general_subject = subject;
 
 if ~exist('nwbFilePath','var') || isempty(nwbFilePath)
     nwbFilePath = fullfile(tiffDir, name);
