@@ -25,7 +25,7 @@ frameRate = info.FrameRate;
 nChannels = info.NumCh;
 width = info.ImageWidth
 height = info.ImageHeight
-channelArrays = {'ChanB', 'ChanA', 'ChanC'};
+channelArrays = {'ChanA', 'ChanB', 'ChanC'};
 indicatorArrays = {'GFP', 'GFP', 'beta-Act-GFP'};
 depth = experiment.NumIm;
 

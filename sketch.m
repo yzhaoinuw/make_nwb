@@ -1,6 +1,6 @@
 clear;
 
-tiffDir = '.\brainwaveZZZ\z-stack-down\';
+tiffDir = '.\brainwaveZZZ\z-stack-up-48min\';
 filename = strcat(mfilename('fullpath'), '.m');
 [dirPath,~,~] = fileparts(filename);
 addpath(fullfile(dirPath, 'matnwb'))
@@ -108,6 +108,9 @@ for i = 1:nChannels
         'data_unit', 'microns' ...
     );
     nwb.acquisition.set(['TwoPhotonSeries', channelArrays{i}], image_series);
+
+    %tests
+    %nwb.acquisition.set('TimeSeries', ones(1, 10));
 
     plane_segmentation = types.core.PlaneSegmentation( ...
         'colnames', {'image_mask'}, ...
