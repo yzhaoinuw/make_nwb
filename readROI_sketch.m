@@ -1,4 +1,4 @@
 addpath("./ReadImageJROI")
 
-roiFile = 'C:\Users\yzhao\AppData\Local\Temp\0405-0966.roi';
+roiFile = 'C:\Users\yzhao\AppData\Local\Temp\01_01.roi';
 [sROI] = ReadImageJROI(roiFile);
